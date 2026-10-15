@@ -35,7 +35,7 @@ header{position:relative;z-index:40}
 .help-q{width:36px;height:36px;padding:0;border-radius:50%;font-weight:800;font-size:16px}
 .wrap.closed{grid-template-columns:1fr}
 .wrap.closed .side{display:none}
-.wrap{max-width:1400px;margin:0 auto;padding:24px;display:grid;gap:20px;grid-template-columns:300px minmax(0,1fr);align-items:start}
+.wrap{max-width:1880px;margin:0 auto;padding:16px 20px;display:grid;gap:16px;grid-template-columns:290px minmax(0,1fr);align-items:start}
 @media (max-width:1100px){.wrap{grid-template-columns:minmax(0,1fr)}}
 .card{background:#fff;border-radius:var(--radius);padding:20px;box-shadow:0 6px 20px rgba(81,36,122,.08);animation:up .45s ease both}
 .card h2{margin:0 0 12px;font-size:15px;color:var(--accent)}
@@ -80,7 +80,7 @@ button.ghost{background:#fff;color:var(--accent);box-shadow:inset 0 0 0 2px var(
   touch-action:none;
 }
 .floor > .muted{padding:40px;text-align:center}
-.floor{width:1000px}
+.floor{width:1400px}   /* room width: keep in step with #floorWrap below */
 dialog{border:0;border-radius:var(--radius);padding:24px;max-width:460px;box-shadow:0 20px 50px rgba(40,20,60,.3)}
 dialog::backdrop{background:rgba(40,20,60,.35)}
 dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
@@ -91,8 +91,8 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
     linear-gradient(#f6f1fa,#eee5f5);
   box-shadow:inset 0 0 40px rgba(81,36,122,.06);
 }
-#roomBox{overflow-x:auto;overflow-y:hidden}
-#floorWrap{width:1000px;overflow:hidden;position:relative;transform-origin:0 0}
+#roomBox{overflow:hidden}
+#floorWrap{width:1400px;overflow:hidden;position:relative;transform-origin:0 0}
 #roomSide{position:absolute;right:8px;bottom:8px;z-index:5;gap:4px;margin:0!important}
 #roomSide button{padding:4px 10px;font-size:12px;background:#fff}
 
@@ -264,10 +264,13 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
 @keyframes spotOut{to{transform:scale(.4) translateY(40px);opacity:0}}
 @keyframes spotGlow{0%,100%{box-shadow:0 6px 0 #b8611d,0 16px 36px rgba(40,20,60,.35)}50%{box-shadow:0 6px 0 #b8611d,0 16px 36px rgba(40,20,60,.35),0 0 50px 14px rgba(217,123,41,.55)}}
 .linkish{background:none;border:0;color:var(--accent);font-size:13px;font-weight:700;text-decoration:underline;cursor:pointer;padding:4px 0;box-shadow:none;transform:none}
+.linkish:disabled{opacity:.45;text-decoration:none}
+#clearAll.armed{color:var(--orange)}
 .pickTools{margin-left:auto;display:flex;align-items:center;gap:8px}
 .pickTools select{font:inherit;font-size:13px;padding:6px 8px;border-radius:10px;border:2px solid var(--accent);color:var(--accent);background:#fff}
 #soundBtn{padding:6px 12px;font-size:13px}
 /* class list: absent */
+.tile{cursor:pointer}
 .tile.absent{opacity:.5;text-decoration:line-through}
 .abs{font-size:11px;color:var(--muted);margin:0 2px 0 6px;display:inline-flex;align-items:center;gap:2px;text-decoration:none;cursor:pointer}
 /* confetti */
@@ -302,6 +305,8 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
       <button class="ghost" id="pasteAdd" style="margin-top:6px">Add all</button>
     </div>
     <div class="muted" id="count" style="margin-top:6px"></div>
+    <div class="muted" style="font-size:12px">Tap a name to mark them absent</div>
+    <button class="linkish" id="clearAll" style="margin-top:4px" title="Remove every name from the class list and seats">Clear all names</button>
     <button class="linkish" id="clearPicks" hidden>Clear picks</button>
 
     <h2 style="margin-top:16px">2. Grouping</h2>
@@ -330,6 +335,7 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
           <option value="normal" selected>Normal</option>
           <option value="slow">Slow</option>
         </select>
+        <select id="voiceSel" aria-label="Voice accent" title="Voice accent"></select>
         <button class="ghost" id="soundBtn" aria-pressed="true">Sound on</button>
       </div>
     </div>
@@ -367,6 +373,7 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
     <li><b>Move a table:</b> drag it. ⟳ turns it 90° per click.</li>
     <li><b>Swap students:</b> tap one name, then another.</li>
     <li><b>Group tables:</b> drag a box around them on the empty floor, then press Group. Groups move together. Use ✕ on a label, or Ungroup, to split them.</li>
+    <li><b>Turn a group:</b> press ⟳ on its label. Every table in it turns 90°.</li>
   </ul>
   <button class="ghost" id="helpClose">Close</button>
 </dialog>
@@ -394,15 +401,16 @@ const TURN = 90;          // one click turns a table this many degrees
    x,y = table centre on the floor (px); a = turn in degrees (chair on the side or far end).
    Tables are listed group by group: 6, then 4, 4, 4. */
 const DEFAULT_LAYOUT = [
-  {x: 117,  y: 159,  a: -90}, {x: 215, y: 159,  a: 90},
-  {x: 103,  y: 302, a: -90}, {x: 208, y: 302, a: 90},
-  {x: 90,  y: 434, a: 180}, {x: 221, y: 434, a: 180},
-  {x: 133, y: 647, a: -90}, {x: 246, y: 647, a: 90},
-  {x: 130, y: 785, a: -90}, {x: 237, y: 793, a: 90},
-  {x: 757, y: 140,  a: -90}, {x: 848, y: 135,  a: 90},
-  {x: 757, y: 283, a: -90}, {x: 852, y: 283, a: 90},
-  {x: 744, y: 523, a: -90}, {x: 844, y: 516, a: 90},
-  {x: 753, y: 671, a: -90}, {x: 848, y: 668, a: 90}
+  /* chairs face outwards: left-hand tables have their chair on the left, right-hand on the right */
+  {x: 124, y: 140, a: -90}, {x: 216, y: 140, a: 90},      // group 1
+  {x: 110, y: 283, a: -90}, {x: 209, y: 283, a: 90},
+  {x: 94,  y: 412, a: 180}, {x: 225, y: 412, a: 180},     // bottom row: chairs below
+  {x: 475, y: 417, a: -90}, {x: 582, y: 417, a: 90},      // group 2
+  {x: 471, y: 555, a: -90}, {x: 573, y: 562, a: 90},
+  {x: 1163, y: 123, a: -90}, {x: 1248, y: 117, a: 90},    // group 3
+  {x: 1163, y: 266, a: -90}, {x: 1251, y: 266, a: 90},
+  {x: 838, y: 424, a: -90}, {x: 931, y: 416, a: 90},      // group 4
+  {x: 847, y: 572, a: -90}, {x: 936, y: 568, a: 90}
 ];
 const DEFAULT_GROUP_SIZES = [6, 4, 4, 4];
 function defaultGroup(k){
@@ -458,7 +466,7 @@ function dropSeat(name){
 /* class list: a tile per student, add one at a time or paste a whole list */
 function renderTiles(){
   $('#tiles').innerHTML = students.length ? students.map((n, i) =>
-    `<span class="tile ${absent.has(n) ? 'absent' : ''}">${esc(n)}<label class="abs" title="Away today"><input type="checkbox" data-abs="${i}" ${absent.has(n) ? 'checked' : ''}>absent</label><button data-rm="${i}" title="Remove ${esc(n)}" aria-label="Remove ${esc(n)}">×</button></span>`).join('') : '<p class="muted empty-hint">Add students below</p>';
+    `<span class="tile ${absent.has(n) ? 'absent' : ''}" data-i="${i}" title="Tap to mark ${esc(n)} absent">${esc(n)}<button data-rm="${i}" title="Remove ${esc(n)}" aria-label="Remove ${esc(n)}">×</button></span>`).join('') : '<p class="muted empty-hint">Add students below</p>';
   const c = students.length;
   $('#count').textContent = c + (c === 1 ? ' student' : ' students');
 }
@@ -477,15 +485,16 @@ function arrange(){
   const allSeated = present().every(n => named.some(s => s.name === n));
   if (!allSeated) seatClass(true); else render();
 }
-$('#tiles').addEventListener('change', e => {
-  const cb = e.target.closest('input[data-abs]');
-  if (!cb) return;
-  const name = students[+cb.dataset.abs];
-  if (cb.checked){ absent.add(name); dropSeat(name); }   // frees their table
-  else absent.delete(name);
-  renderTiles(); updateBar(); arrange();
-});
 $('#tiles').addEventListener('click', e => {
+  const t = e.target.closest('.tile');
+  if (t && !e.target.closest('button[data-rm]')){
+    // tap a name to mark them away today (they keep their place on the list)
+    const name = students[+t.dataset.i];
+    if (absent.has(name)) absent.delete(name);
+    else { absent.add(name); dropSeat(name); }   // frees their table
+    renderTiles(); updateBar(); arrange();
+    return;
+  }
   const b = e.target.closest('button[data-rm]');
   if (b){ const name = students[+b.dataset.rm]; students.splice(+b.dataset.rm, 1); renderTiles(); askedNames.delete(name); updateBar(); dropSeat(name); arrange(); }
 });
@@ -709,7 +718,8 @@ function tableHTML(tb){
     </div>`;
 }
 
-/* fit the room to the card width, so names stay readable. The page scrolls down if the room is tall. */
+/* fit the room to the card, both across and down, so the whole layout shows without scrolling.
+   It only gets smaller than the card when the screen is too short for it. */
 let ROOM_Z = 1;
 function fitRoom(){
   const floor = $('#floor'), wrap = $('#floorWrap');
@@ -717,11 +727,13 @@ function fitRoom(){
   wrap.style.transform = ''; box.style.height = ''; box.style.width = '';
   if (!tables.length || !floor.offsetHeight) { ROOM_Z = 1; return; }
   const fh = floor.offsetHeight, fw = floor.offsetWidth;
-  const cw = wrap.parentElement.clientWidth - 40;   // the card's inner width
-  ROOM_Z = clamp(cw / fw, 0.8, 1);                 // never below 80%, so names stay readable
+  const cw = wrap.parentElement.clientWidth - 40;                              // the card's inner width
+  const avail = window.innerHeight - box.getBoundingClientRect().top - 44;     // down to the bottom of the screen, past the card and page padding
+  ROOM_Z = clamp(Math.min(1, cw / fw, avail / fh), 0.3, 1);                    // the room always fits the card, even on a phone (30% is the floor)
   wrap.style.transform = `scale(${ROOM_Z})`;
   box.style.height = fh * ROOM_Z + 'px';
   box.style.width = fw * ROOM_Z + 'px';
+  box.style.margin = '0 auto';   // centred when the room is narrower than the card
 }
 
 function render(){
@@ -745,6 +757,7 @@ function render(){
     const gids = [...new Set(tables.filter(t => t.gid).map(t => t.gid))];
     floor.insertAdjacentHTML('beforeend', gids.map((g, i) => `
       <div class="gbadge" data-gid="${g}"><span>Group ${i + 1}</span>
+        <button data-rotgroup="${g}" title="Turn every table in the group 90°" aria-label="Turn Group ${i + 1}">⟳</button>
         <button data-ungroup="${g}" title="Ungroup">✕</button></div>`).join(''));
     placeBadges();
 
@@ -774,6 +787,34 @@ function applyAngle(el, tb){
 /* ---- tap: turn, ungroup, or swap two names ---- */
 $('#floor').addEventListener('click', e => {
   if (justDragged){ justDragged = false; return; }
+
+  const rotG = e.target.closest('[data-rotgroup]');
+  if (rotG){
+    // the whole group turns as one object: each table swings round the group's middle,
+    // keeping its place relative to the others, and turns with it
+    const ms = membersOf(rotG.dataset.rotgroup);
+    const cx = ms.reduce((s, t) => s + t.x, 0) / ms.length;
+    const cy = ms.reduce((s, t) => s + t.y, 0) / ms.length;
+    ms.forEach(t => {
+      const dx = t.x - cx, dy = t.y - cy;     // 90° clockwise on screen
+      t.x = cx - dy; t.y = cy + dx; t.a += TURN;
+    });
+    // if the turned group pokes off the floor, slide the whole group back in (its shape is kept)
+    const box = boxOf(ms), floor = $('#floor');
+    let sx = 0, sy = 0;
+    if (box.minX < 0) sx = -box.minX;
+    if (box.maxX > floor.clientWidth) sx = floor.clientWidth - box.maxX;
+    if (box.minY < 0) sy = -box.minY;
+    ms.forEach(t => { t.x += sx; t.y += sy; });
+    // update the tables in place (no full redraw, so nothing blinks)
+    ms.forEach(t => {
+      const el = floor.querySelector(`.table[data-id="${t.id}"]`);
+      if (el) applyAngle(el, t);
+    });
+    floor.querySelectorAll('.table.clash').forEach(el => el.classList.remove('clash'));
+    clashIds().forEach(id => floor.querySelector(`.table[data-id="${id}"]`)?.classList.add('clash'));
+    return;
+  }
 
   const ung = e.target.closest('[data-ungroup]');
   if (ung){
@@ -1004,6 +1045,7 @@ $('#tidyBtn').addEventListener('click', () => {
 let askedNames = new Set();   // students already picked this session
 let hotTid = null;            // table of the student picked last
 let spinning = false;
+let lastPick = null;
 
 function pickPool(){ return names().filter(n => !askedNames.has(n)); }
 
@@ -1018,6 +1060,7 @@ function setStatus(html){ $('#pickStatus').innerHTML = html; }
 function updateBar(){
   const total = names().length, done = askedNames.size, left = pickPool().length;
   $('#clearPicks').hidden = done === 0;
+  $('#clearAll').disabled = !students.length;
   const btn = $('#pickBtn');
   const finished = total && !left;
   btn.disabled = spinning || !total;
@@ -1053,6 +1096,7 @@ function land(c, steps){
   spinning = false;
   setStatus('');
   showSpot(c.name);
+  lastPick = c.name;
   confetti(c.el);
   if (soundOn){ fanfare(); speakName(c.name); }
   updateBar();
@@ -1140,6 +1184,33 @@ function pickNext(){
 
 $('#clearPicks').addEventListener('click', () => { if (!spinning) resetPicks(); });
 
+/* clear all names: two clicks, so it cannot be hit by accident. Tables and groups stay. */
+let clearArmed = null;
+function disarmClearAll(){
+  clearTimeout(clearArmed); clearArmed = null;
+  const b = $('#clearAll'); b.textContent = 'Clear all names'; b.classList.remove('armed');
+}
+function clearAllNames(){
+  students = [];
+  absent = new Set();
+  seats.forEach(s => { s.name = ''; });   // seats and tables stay where they are
+  sel = null; picked = []; hotTid = null;
+  resetPicks();
+  renderTiles();
+  arrange();
+  toast('All names cleared');
+}
+$('#clearAll').addEventListener('click', () => {
+  if (spinning) return;
+  if (!clearArmed){
+    const b = $('#clearAll'); b.textContent = 'Click again to clear all'; b.classList.add('armed');
+    clearArmed = setTimeout(disarmClearAll, 3000);   // back to normal if not confirmed
+    return;
+  }
+  disarmClearAll();
+  clearAllNames();
+});
+
 /* sounds, made in the browser (no audio files). Created on the first click, so browsers allow them. */
 let soundOn = true, actx = null, noiseBuf = null;
 function audioCtx(){
@@ -1181,21 +1252,44 @@ function fanfare(){
 /* read the picked name aloud with the most natural English voice the computer has (no audio files) */
 const VOICE_PREFERENCE = [/natural|neural|premium|enhanced/i, /en[-_]AU/i, /karen|lee|catherine|matilda/i, /google.*english|english.*google/i, /^en/i];
 function pickVoice(){
-  const voices = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
+  const voices = englishVoices();
   for (const rx of VOICE_PREFERENCE){
     const v = voices.find(x => rx.test(x.name) || rx.test(x.lang));
     if (v) return v;
   }
   return null;
 }
+const ACCENTS = { 'en-AU': 'Australian', 'en-GB': 'British', 'en-US': 'American', 'en-NZ': 'New Zealand', 'en-IE': 'Irish', 'en-IN': 'Indian', 'en-ZA': 'South African' };
+const accentName = lang => ACCENTS[lang.replace('_', '-')] || lang;
+function englishVoices(){
+  const rank = l => /^en-AU/i.test(l) ? 0 : /^en-GB/i.test(l) ? 1 : /^en-US/i.test(l) ? 2 : 3;
+  return ('speechSynthesis' in window ? speechSynthesis.getVoices() : [])
+    .filter(v => /^en/i.test(v.lang))
+    .sort((a, b) => rank(a.lang) - rank(b.lang));
+}
+/* fill the voice list from whatever the computer has; the most natural voice is chosen first */
+function fillVoices(){
+  const sel = $('#voiceSel');
+  const voices = englishVoices();
+  if (!voices.length){ sel.innerHTML = '<option value="">No voices found</option>'; sel.disabled = true; return; }
+  sel.disabled = false;
+  sel.innerHTML = voices.map(v => `<option value="${esc(v.voiceURI)}">${esc(accentName(v.lang))} · ${esc(v.name)}</option>`).join('');
+  const best = pickVoice();
+  if (best) sel.value = best.voiceURI;
+}
+if ('speechSynthesis' in window){
+  speechSynthesis.onvoiceschanged = fillVoices;   // some browsers load voices a moment later
+  fillVoices();
+}
+$('#voiceSel').addEventListener('change', () => { if (lastPick) speakName(lastPick); });
+
 function speakName(name){
   try {
     if (!('speechSynthesis' in window)) return;
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(name);
-    const voice = pickVoice();
-    if (voice) u.voice = voice;
-    u.lang = voice ? voice.lang : 'en-AU';
+    const chosen = englishVoices().find(v => v.voiceURI === $('#voiceSel').value) || pickVoice();
+    if (chosen){ u.voice = chosen; u.lang = chosen.lang; } else { u.lang = 'en-AU'; }
     u.rate = 0.92; u.pitch = 1.05;
     setTimeout(() => speechSynthesis.speak(u), 650);   // after the fanfare
   } catch (e) { /* no voice available: stay silent */ }
