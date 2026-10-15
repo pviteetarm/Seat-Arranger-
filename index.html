@@ -36,7 +36,7 @@ header{position:relative;z-index:40}
 .wrap.closed{grid-template-columns:1fr}
 .wrap.closed .side{display:none}
 .wrap{max-width:1400px;margin:0 auto;padding:24px;display:grid;gap:20px;grid-template-columns:300px minmax(0,1fr);align-items:start}
-@media (max-width:860px){.wrap{grid-template-columns:1fr}}
+@media (max-width:1100px){.wrap{grid-template-columns:minmax(0,1fr)}}
 .card{background:#fff;border-radius:var(--radius);padding:20px;box-shadow:0 6px 20px rgba(81,36,122,.08);animation:up .45s ease both}
 .card h2{margin:0 0 12px;font-size:15px;color:var(--accent)}
 .muted{color:var(--muted);font-size:13px}
@@ -91,7 +91,7 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
     linear-gradient(#f6f1fa,#eee5f5);
   box-shadow:inset 0 0 40px rgba(81,36,122,.06);
 }
-#roomBox{overflow:hidden}
+#roomBox{overflow-x:auto;overflow-y:hidden}
 #floorWrap{width:1000px;overflow:hidden;position:relative;transform-origin:0 0}
 #roomSide{position:absolute;right:8px;bottom:8px;z-index:5;gap:4px;margin:0!important}
 #roomSide button{padding:4px 10px;font-size:12px;background:#fff}
@@ -263,6 +263,13 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
 @keyframes spotIn{0%{transform:scale(.2) rotate(-10deg);opacity:0}70%{transform:scale(1.08) rotate(2deg);opacity:1}100%{transform:scale(1) rotate(0)}}
 @keyframes spotOut{to{transform:scale(.4) translateY(40px);opacity:0}}
 @keyframes spotGlow{0%,100%{box-shadow:0 6px 0 #b8611d,0 16px 36px rgba(40,20,60,.35)}50%{box-shadow:0 6px 0 #b8611d,0 16px 36px rgba(40,20,60,.35),0 0 50px 14px rgba(217,123,41,.55)}}
+.linkish{background:none;border:0;color:var(--accent);font-size:13px;font-weight:700;text-decoration:underline;cursor:pointer;padding:4px 0;box-shadow:none;transform:none}
+.pickTools{margin-left:auto;display:flex;align-items:center;gap:8px}
+.pickTools select{font:inherit;font-size:13px;padding:6px 8px;border-radius:10px;border:2px solid var(--accent);color:var(--accent);background:#fff}
+#soundBtn{padding:6px 12px;font-size:13px}
+/* class list: absent */
+.tile.absent{opacity:.5;text-decoration:line-through}
+.abs{font-size:11px;color:var(--muted);margin:0 2px 0 6px;display:inline-flex;align-items:center;gap:2px;text-decoration:none;cursor:pointer}
 /* confetti */
 .confetti{position:fixed;inset:0;pointer-events:none;z-index:150;overflow:hidden}
 .confetti i{position:absolute;width:9px;height:14px;border-radius:2px;will-change:transform,opacity}
@@ -295,6 +302,7 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
       <button class="ghost" id="pasteAdd" style="margin-top:6px">Add all</button>
     </div>
     <div class="muted" id="count" style="margin-top:6px"></div>
+    <button class="linkish" id="clearPicks" hidden>Clear picks</button>
 
     <h2 style="margin-top:16px">2. Grouping</h2>
     <label class="opt"><input type="radio" name="mode" value="standing" checked> Standing (groups)</label>
@@ -316,6 +324,14 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
     <div class="pickbar" id="pickBar">
       <button class="orange" id="pickBtn">Select student</button>
       <span class="pickStatus" id="pickStatus">Ready when you are</span>
+      <div class="pickTools">
+        <select id="pickSpeed" aria-label="Spin speed" title="Spin speed">
+          <option value="quick">Quick</option>
+          <option value="normal" selected>Normal</option>
+          <option value="slow">Slow</option>
+        </select>
+        <button class="ghost" id="soundBtn" aria-pressed="true">Sound on</button>
+      </div>
     </div>
     <div id="roomView">
 
@@ -418,7 +434,9 @@ function toast(msg){
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 let students = [];   // the class list, one entry per student
-function names(){ return students.slice(); }
+let absent = new Set();   // away today: stays on the list, but not seated or picked
+function present(){ return students.filter(n => !absent.has(n)); }
+function names(){ return present(); }
 function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; }
 const tbById = id => tables.find(t => t.id === id);
 const seatById = id => seats.find(s => s.id === id);
@@ -440,7 +458,7 @@ function dropSeat(name){
 /* class list: a tile per student, add one at a time or paste a whole list */
 function renderTiles(){
   $('#tiles').innerHTML = students.length ? students.map((n, i) =>
-    `<span class="tile">${esc(n)}<button data-rm="${i}" title="Remove ${esc(n)}" aria-label="Remove ${esc(n)}">×</button></span>`).join('') : '<p class="muted empty-hint">Add students below</p>';
+    `<span class="tile ${absent.has(n) ? 'absent' : ''}">${esc(n)}<label class="abs" title="Away today"><input type="checkbox" data-abs="${i}" ${absent.has(n) ? 'checked' : ''}>absent</label><button data-rm="${i}" title="Remove ${esc(n)}" aria-label="Remove ${esc(n)}">×</button></span>`).join('') : '<p class="muted empty-hint">Add students below</p>';
   const c = students.length;
   $('#count').textContent = c + (c === 1 ? ' student' : ' students');
 }
@@ -448,10 +466,28 @@ function addNames(list){
   list.map(s => s.trim()).filter(Boolean).forEach(n => students.push(n));
   renderTiles();
   updateBar();
+  arrange();
 }
+
+/* the seating or groups follow the class list automatically */
+function arrange(){
+  if (mode() === 'standing'){ renderStanding(); return; }
+  if (!present().length){ render(); return; }
+  const named = seats.filter(s => s.name);
+  const allSeated = present().every(n => named.some(s => s.name === n));
+  if (!allSeated) seatClass(true); else render();
+}
+$('#tiles').addEventListener('change', e => {
+  const cb = e.target.closest('input[data-abs]');
+  if (!cb) return;
+  const name = students[+cb.dataset.abs];
+  if (cb.checked){ absent.add(name); dropSeat(name); }   // frees their table
+  else absent.delete(name);
+  renderTiles(); updateBar(); arrange();
+});
 $('#tiles').addEventListener('click', e => {
   const b = e.target.closest('button[data-rm]');
-  if (b){ const name = students[+b.dataset.rm]; students.splice(+b.dataset.rm, 1); renderTiles(); askedNames.delete(name); updateBar(); dropSeat(name); }
+  if (b){ const name = students[+b.dataset.rm]; students.splice(+b.dataset.rm, 1); renderTiles(); askedNames.delete(name); updateBar(); dropSeat(name); arrange(); }
 });
 $('#newName').addEventListener('keydown', e => {
   if (e.key === 'Enter'){ e.preventDefault(); addNames([$('#newName').value]); $('#newName').value = ''; }
@@ -610,12 +646,12 @@ function applyDefault(){
 /* seat the class: first seating fills the tables in a shuffled order.
    Later seatings keep everyone already seated, and place new students on isolated (ungrouped) tables.
    Students removed from the list give up their table. */
-function seatClass(){
-  if (!students.length){ toast('Add some names first'); return; }
+function seatClass(quiet){
+  if (!present().length){ if (!quiet) toast('Add some names first'); return; }
   ensureTables();
   const firstSeating = !seats.some(s => s.name);
   // keep seats for students still on the list; drop seats of students who were removed
-  const pool = firstSeating ? shuffle(students.slice()) : students.slice();
+  const pool = firstSeating ? shuffle(present().slice()) : present().slice();
   const kept = [];
   if (!firstSeating){
     seats.forEach(s => {
@@ -642,8 +678,8 @@ function seatClass(){
   placeNewTables();
   sel = null;
   render();
-  toast(firstSeating
-    ? `${students.length} students seated`
+  if (!quiet) toast(firstSeating
+    ? `${present().length} students seated`
     : added ? `${added} new student${added === 1 ? '' : 's'} seated` : 'Seating updated');
 }
 
@@ -673,31 +709,26 @@ function tableHTML(tb){
     </div>`;
 }
 
-/* fit the room (whiteboard and floor) to the window, so the page never scrolls */
+/* fit the room to the card width, so names stay readable. The page scrolls down if the room is tall. */
 let ROOM_Z = 1;
 function fitRoom(){
   const floor = $('#floor'), wrap = $('#floorWrap');
   const box = $('#roomBox');
-  wrap.style.transform = ''; box.style.height = '';
+  wrap.style.transform = ''; box.style.height = ''; box.style.width = '';
   if (!tables.length || !floor.offsetHeight) { ROOM_Z = 1; return; }
   const fh = floor.offsetHeight, fw = floor.offsetWidth;
-  const avail = window.innerHeight - wrap.getBoundingClientRect().top - 16;
   const cw = wrap.parentElement.clientWidth - 40;   // the card's inner width
-  ROOM_Z = Math.min(1, avail / fh, cw / fw);
-  const set = () => { wrap.style.transform = `scale(${ROOM_Z})`; box.style.height = fh * ROOM_Z + 'px'; };
-  set();
-  // page padding and card edges also take height: keep shrinking until nothing scrolls
-  for (let i = 0; i < 10 && document.documentElement.scrollHeight > innerHeight; i++){
-    ROOM_Z *= window.innerHeight / document.documentElement.scrollHeight * 0.98;
-    set();
-  }
+  ROOM_Z = clamp(cw / fw, 0.8, 1);                 // never below 80%, so names stay readable
+  wrap.style.transform = `scale(${ROOM_Z})`;
+  box.style.height = fh * ROOM_Z + 'px';
+  box.style.width = fw * ROOM_Z + 'px';
 }
 
 function render(){
   const floor = $('#floor');
   picked = picked.filter(id => tbById(id));
   if (!tables.length){
-    floor.innerHTML = '<p class="muted">Enter names and tap “Seat the class”.</p>';
+    floor.innerHTML = '<p class="muted">Add names to the class list and they will be seated here.</p>';
     floor.style.minHeight = '600px';
   } else {
     placeNewTables();
@@ -879,7 +910,19 @@ $('#ungroupSel').addEventListener('click', () => {
 $('#linkCancel').addEventListener('click', () => { picked = []; render(); });
 
 /* ---- room buttons ---- */
-$('#seatBtn').addEventListener('click', () => mode() === 'standing' ? renderStanding() : seatClass());
+$('#seatBtn').addEventListener('click', () => mode() === 'standing' ? renderStanding() : reshuffleSeats());
+
+/* shuffle the names among the seats already in use (tables and groups stay put) */
+function reshuffleSeats(){
+  if (!present().length){ toast('Add some names first'); return; }
+  const named = seats.filter(s => s.name);
+  const allSeated = present().every(n => named.some(s => s.name === n)) && named.length === present().length;
+  if (!allSeated){ seatClass(true); return; }
+  const shuffled = shuffle(named.map(s => s.name));
+  named.forEach((s, i) => { s.name = shuffled[i]; });
+  render();
+  toast('Seats reshuffled');
+}
 
 /* standing mode: names dealt into groups of about the chosen size, no tables involved */
 function mode(){ return document.querySelector('input[name=mode]:checked').value; }
@@ -914,7 +957,7 @@ function fitStanding(){
   if (sv.hidden) return;
   sv.style.height = '';
   sv.style.minHeight = '';
-  if (window.matchMedia('(max-width:860px)').matches) return;   // sidebar sits above: grow with content
+  if (window.matchMedia('(max-width:1100px)').matches) return;   // sidebar sits above: grow with content
   const bottom = $('aside.side').getBoundingClientRect().bottom;
   const top = sv.getBoundingClientRect().top;
   let h = Math.max(300, bottom - top - 20);
@@ -928,11 +971,12 @@ function setMode(){
   const standing = mode() === 'standing';
   $('#roomView').hidden = standing;
   $('#standingView').hidden = !standing;
-  $('#seatBtn').textContent = standing ? 'Make groups' : 'Seat the class';
+  $('#seatBtn').textContent = standing ? 'Reshuffle groups' : 'Reshuffle seats';
   $('#gsizeWrap').hidden = !standing;
   $('#sitNote').hidden = standing;
   $('#roomSide').hidden = standing;
-  if (standing){ renderStanding(); fitStanding(); setTimeout(fitStanding, 500); } else render();
+  arrange();
+  if (standing){ fitStanding(); setTimeout(fitStanding, 500); }
 }
 document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', setMode));
 $('#gsize').addEventListener('change', renderStanding);
@@ -973,6 +1017,7 @@ function setStatus(html){ $('#pickStatus').innerHTML = html; }
 
 function updateBar(){
   const total = names().length, done = askedNames.size, left = pickPool().length;
+  $('#clearPicks').hidden = done === 0;
   const btn = $('#pickBtn');
   const finished = total && !left;
   btn.disabled = spinning || !total;
@@ -1009,6 +1054,7 @@ function land(c, steps){
   setStatus('');
   showSpot(c.name);
   confetti(c.el);
+  if (soundOn){ fanfare(); speakName(c.name); }
   updateBar();
 }
 
@@ -1066,7 +1112,8 @@ function pickNext(){
   if (!open.length){ setStatus('Everyone has had a turn. Start again to go round once more.'); updateBar(); return; }
 
   const win = open[Math.floor(Math.random() * open.length)];
-  const steps = 20 + Math.floor(Math.random() * 6);
+  const steps = 14 + Math.floor(Math.random() * 5);
+  const speed = { quick: 0.6, normal: 1, slow: 2 }[$('#pickSpeed').value] || 1;
   spinning = true;
   hideSpot();
   updateBar();
@@ -1085,10 +1132,80 @@ function pickNext(){
     c.el.classList.add('spin');
     prev = c.el;
     if (last){ land(win, steps); return; }
+    if (soundOn) drumHit(0.2);
     i++;
-    setTimeout(step, 30 + 260 * Math.pow(i / steps, 2));   // starts quick, slows to a stop
+    setTimeout(step, speed * (25 + 160 * Math.pow(i / steps, 2)));   // starts quick, slows to a stop
   })();
 }
+
+$('#clearPicks').addEventListener('click', () => { if (!spinning) resetPicks(); });
+
+/* sounds, made in the browser (no audio files). Created on the first click, so browsers allow them. */
+let soundOn = true, actx = null, noiseBuf = null;
+function audioCtx(){
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  } catch (e) { return null; }
+}
+function drumHit(vol){
+  const a = audioCtx(); if (!a) return;
+  if (!noiseBuf){
+    noiseBuf = a.createBuffer(1, a.sampleRate * 0.1, a.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const t = a.currentTime;
+  const src = a.createBufferSource(); src.buffer = noiseBuf;
+  const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800;
+  const g = a.createGain();
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+  src.connect(f); f.connect(g); g.connect(a.destination);
+  src.start(t); src.stop(t + 0.1);
+}
+function fanfare(){
+  const a = audioCtx(); if (!a) return;
+  const t0 = a.currentTime;
+  [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((hz, i) => {
+    const o = a.createOscillator(), g = a.createGain();
+    const at = t0 + i * 0.09;
+    o.type = 'triangle'; o.frequency.value = hz;
+    g.gain.setValueAtTime(0, at);
+    g.gain.linearRampToValueAtTime(0.22, at + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, at + 0.7);
+    o.connect(g); g.connect(a.destination);
+    o.start(at); o.stop(at + 0.75);
+  });
+}
+/* read the picked name aloud with the most natural English voice the computer has (no audio files) */
+const VOICE_PREFERENCE = [/natural|neural|premium|enhanced/i, /en[-_]AU/i, /karen|lee|catherine|matilda/i, /google.*english|english.*google/i, /^en/i];
+function pickVoice(){
+  const voices = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
+  for (const rx of VOICE_PREFERENCE){
+    const v = voices.find(x => rx.test(x.name) || rx.test(x.lang));
+    if (v) return v;
+  }
+  return null;
+}
+function speakName(name){
+  try {
+    if (!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(name);
+    const voice = pickVoice();
+    if (voice) u.voice = voice;
+    u.lang = voice ? voice.lang : 'en-AU';
+    u.rate = 0.92; u.pitch = 1.05;
+    setTimeout(() => speechSynthesis.speak(u), 650);   // after the fanfare
+  } catch (e) { /* no voice available: stay silent */ }
+}
+
+$('#soundBtn').addEventListener('click', () => {
+  soundOn = !soundOn;
+  $('#soundBtn').textContent = soundOn ? 'Sound on' : 'Sound off';
+  $('#soundBtn').setAttribute('aria-pressed', String(soundOn));
+});
 
 $('#pickBtn').addEventListener('click', () => {
   if (spinning) return;
