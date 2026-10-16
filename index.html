@@ -265,7 +265,24 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
 @keyframes spotGlow{0%,100%{box-shadow:0 6px 0 #b8611d,0 16px 36px rgba(40,20,60,.35)}50%{box-shadow:0 6px 0 #b8611d,0 16px 36px rgba(40,20,60,.35),0 0 50px 14px rgba(217,123,41,.55)}}
 .linkish{background:none;border:0;color:var(--accent);font-size:13px;font-weight:700;text-decoration:underline;cursor:pointer;padding:4px 0;box-shadow:none;transform:none}
 .linkish:disabled{opacity:.45;text-decoration:none}
-#clearAll.armed{color:var(--orange)}
+.danger{margin-top:12px;background:#fdecec;border:2px solid #efb7b2;border-radius:12px;padding:10px 12px}
+.danger p{margin:6px 0 0;font-size:12px;color:#8a3b36}
+#clearAll{background:#b3261e;color:#fff}
+#clearAll.armed{background:#7f1d16;box-shadow:0 0 0 3px #fff,0 0 0 5px #b3261e}
+/* view switch: Standard view / Table view */
+.viewbar{margin-bottom:12px}
+.viewtoggle{position:relative;display:inline-flex;gap:4px;background:#f1ebf7;border-radius:999px;padding:4px}
+.viewtoggle input{position:absolute;opacity:0;pointer-events:none}
+.viewtoggle span{display:block;padding:10px 20px;border-radius:999px;font-size:15px;font-weight:700;color:var(--accent);cursor:pointer}
+.viewtoggle input:checked + span{background:var(--accent);color:#fff;box-shadow:0 4px 10px rgba(81,36,122,.25)}
+.viewtoggle input:focus-visible + span{outline:3px solid var(--orange);outline-offset:2px}
+/* voice button: speaker icon, with a slash through it while voice is off */
+#voiceBtn{display:inline-flex;align-items:center;gap:6px}
+#voiceBtn .spk{flex:none}
+#voiceBtn .slash{visibility:hidden}
+#voiceBtn.off .waves{visibility:hidden}
+#voiceBtn.off .slash{visibility:visible}
+#voiceBtn.off{color:var(--muted);box-shadow:inset 0 0 0 2px #cfc4dd}
 .pickTools{margin-left:auto;display:flex;align-items:center;gap:8px}
 .pickTools select{font:inherit;font-size:13px;padding:6px 8px;border-radius:10px;border:2px solid var(--accent);color:var(--accent);background:#fff}
 #soundBtn{padding:6px 12px;font-size:13px}
@@ -295,23 +312,19 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
   <aside class="card side">
     <h2>1. Class list</h2>
     <div class="tiles" id="tiles"></div>
-    <div class="addrow">
-      <input type="text" id="newName" placeholder="Add a student" aria-label="Add a student">
-      <button class="ghost" id="addBtn">Add</button>
-    </div>
-    <button class="ghost" id="pasteToggle" style="margin-top:8px">Paste a list</button>
-    <div id="pasteBox" hidden style="margin-top:8px">
-      <textarea id="pasteText" placeholder="One name per line"></textarea>
-      <button class="ghost" id="pasteAdd" style="margin-top:6px">Add all</button>
-    </div>
     <div class="muted" id="count" style="margin-top:6px"></div>
     <div class="muted" style="font-size:12px">Tap a name to mark them absent</div>
-    <button class="linkish" id="clearAll" style="margin-top:4px" title="Remove every name from the class list and seats">Clear all names</button>
+    <div class="addrow">
+      <input type="text" id="newName" placeholder="Add a name or paste a list" aria-label="Add a name, or paste a list of names">
+      <button class="ghost" id="addBtn">Add</button>
+    </div>
+    <div class="danger">
+      <button id="clearAll" title="Remove every name from the class list and seats">Clear all names</button>
+      <p>Removes every name, seat and pick. Tables and groups stay.</p>
+    </div>
     <button class="linkish" id="clearPicks" hidden>Clear picks</button>
 
-    <h2 style="margin-top:16px">2. Grouping</h2>
-    <label class="opt"><input type="radio" name="mode" value="standing" checked> Standing (groups)</label>
-    <label class="opt"><input type="radio" name="mode" value="sitting"> Sitting (fixed tables)</label>
+    <h2 style="margin-top:16px">2. Seating</h2>
     <p class="muted" id="sitNote">Each table seats one student.</p>
     <div id="gsizeWrap" hidden>
       <label class="muted">Max group size
@@ -326,6 +339,12 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
 
   <!-- MAIN: room -->
   <main class="card">
+    <div class="viewbar">
+      <div class="viewtoggle" role="radiogroup" aria-label="View">
+        <label><input type="radio" name="mode" value="standing" checked><span>Standard view</span></label>
+        <label><input type="radio" name="mode" value="sitting"><span>Table view</span></label>
+      </div>
+    </div>
     <div class="pickbar" id="pickBar">
       <button class="orange" id="pickBtn">Select student</button>
       <span class="pickStatus" id="pickStatus">Ready when you are</span>
@@ -335,8 +354,15 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
           <option value="normal" selected>Normal</option>
           <option value="slow">Slow</option>
         </select>
+        <button class="ghost off" id="voiceBtn" aria-pressed="false" title="Read the picked name aloud">
+          <svg class="spk" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/>
+            <path class="waves" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path class="slash" d="M3 3l18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+          </svg>
+          <span id="voiceLabel">Voice off</span>
+        </button>
         <select id="voiceSel" aria-label="Voice accent" title="Voice accent"></select>
-        <button class="ghost" id="soundBtn" aria-pressed="true">Sound on</button>
       </div>
     </div>
     <div id="roomView">
@@ -504,9 +530,14 @@ $('#newName').addEventListener('keydown', e => {
 $('#addBtn').addEventListener('click', () => {
   addNames([$('#newName').value]); $('#newName').value = ''; $('#newName').focus();
 });
-$('#pasteToggle').addEventListener('click', () => { $('#pasteBox').hidden = !$('#pasteBox').hidden; });
-$('#pasteAdd').addEventListener('click', () => {
-  addNames($('#pasteText').value.split('\n')); $('#pasteText').value = ''; $('#pasteBox').hidden = true;
+/* one field for everything: pasting several lines adds them all at once */
+$('#newName').addEventListener('paste', e => {
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (/\n/.test(text)){
+    e.preventDefault();
+    addNames(text.split(/\r?\n/));
+    $('#newName').value = '';
+  }
 });
 
 /* table surface size for c seats (its long side holds a row of seats) */
@@ -842,6 +873,9 @@ $('#floor').addEventListener('click', e => {
       [a.name, b.name] = [b.name, a.name];
       sel = null;
     }
+    // tapping a name always reads it out, whatever the Voice setting
+    const tapped = seatById(id);
+    if (tapped && tapped.name) speakName(tapped.name);
     render();
   }
 });
@@ -1098,7 +1132,8 @@ function land(c, steps){
   showSpot(c.name);
   lastPick = c.name;
   confetti(c.el);
-  if (soundOn){ fanfare(); speakName(c.name); }
+  if (soundOn) fanfare();
+  if (voiceOn) speakName(c.name);
   updateBar();
 }
 
@@ -1212,7 +1247,7 @@ $('#clearAll').addEventListener('click', () => {
 });
 
 /* sounds, made in the browser (no audio files). Created on the first click, so browsers allow them. */
-let soundOn = true, actx = null, noiseBuf = null;
+let soundOn = true, voiceOn = false, actx = null, noiseBuf = null;   // voice (reading names aloud) is off by default
 function audioCtx(){
   try {
     if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1281,7 +1316,18 @@ if ('speechSynthesis' in window){
   speechSynthesis.onvoiceschanged = fillVoices;   // some browsers load voices a moment later
   fillVoices();
 }
-$('#voiceSel').addEventListener('change', () => { if (lastPick) speakName(lastPick); });
+/* standard view: tapping a name reads it out, whatever the Voice setting */
+$('#groups').addEventListener('click', e => {
+  const n = e.target.closest('.n');
+  if (n) speakName(n.textContent.trim());
+});
+$('#voiceSel').addEventListener('change', () => { if (voiceOn && lastPick) speakName(lastPick); });
+$('#voiceBtn').addEventListener('click', () => {
+  voiceOn = !voiceOn;
+  $('#voiceBtn').classList.toggle('off', !voiceOn);
+  $('#voiceLabel').textContent = voiceOn ? 'Voice on' : 'Voice off';
+  $('#voiceBtn').setAttribute('aria-pressed', String(voiceOn));
+});
 
 function speakName(name){
   try {
@@ -1295,11 +1341,6 @@ function speakName(name){
   } catch (e) { /* no voice available: stay silent */ }
 }
 
-$('#soundBtn').addEventListener('click', () => {
-  soundOn = !soundOn;
-  $('#soundBtn').textContent = soundOn ? 'Sound on' : 'Sound off';
-  $('#soundBtn').setAttribute('aria-pressed', String(soundOn));
-});
 
 $('#pickBtn').addEventListener('click', () => {
   if (spinning) return;
