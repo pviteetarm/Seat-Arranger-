@@ -174,6 +174,9 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
   transition:transform .25s ease,background .2s;
 }
 .surface .tn:only-child{max-width:100%}
+/* two-seat tables: one name above the other, each using the full table length */
+.surface.two{flex-direction:column;flex-wrap:nowrap;justify-content:center;gap:6px}
+.surface.two .tn{max-width:100%}
 .tn.pB{background:#fbe3cc}
 .tn.empty{background:transparent;color:var(--muted);box-shadow:none;border:1.5px dashed #bfb3cf;font-weight:600}
 .tn.sel{background:var(--orange);color:#fff}
@@ -270,7 +273,7 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
 #clearAll{background:#b3261e;color:#fff}
 #clearAll.armed{background:#7f1d16;box-shadow:0 0 0 3px #fff,0 0 0 5px #b3261e}
 /* view switch: Standard view / Table view */
-.viewbar{margin-bottom:12px}
+.viewbar{margin-bottom:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
 .viewtoggle{position:relative;display:inline-flex;gap:4px;background:#f1ebf7;border-radius:999px;padding:4px}
 .viewtoggle input{position:absolute;opacity:0;pointer-events:none}
 .viewtoggle span{display:block;padding:10px 20px;border-radius:999px;font-size:15px;font-weight:700;color:var(--accent);cursor:pointer}
@@ -344,6 +347,7 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
         <label><input type="radio" name="mode" value="standing" checked><span>Standard view</span></label>
         <label><input type="radio" name="mode" value="sitting"><span>Table view</span></label>
       </div>
+      <button class="ghost" id="partBtn" title="Tap to show the next part of each name">Part 1 of 1 ›</button>
     </div>
     <div class="pickbar" id="pickBar">
       <button class="orange" id="pickBtn">Select student</button>
@@ -400,6 +404,7 @@ dialog ul{padding-left:20px;line-height:1.6;font-size:14px}
     <li><b>Swap students:</b> tap one name, then another.</li>
     <li><b>Group tables:</b> drag a box around them on the empty floor, then press Group. Groups move together. Use ✕ on a label, or Ungroup, to split them.</li>
     <li><b>Turn a group:</b> press ⟳ on its label. Every table in it turns 90°.</li>
+    <li><b>Name parts:</b> type a name with spaces, e.g. "Smith Robert Bob". The Part button on the room steps through the words, then shows the whole name.</li>
   </ul>
   <button class="ghost" id="helpClose">Close</button>
 </dialog>
@@ -471,6 +476,36 @@ let students = [];   // the class list, one entry per student
 let absent = new Set();   // away today: stays on the list, but not seated or picked
 function present(){ return students.filter(n => !absent.has(n)); }
 function names(){ return present(); }
+
+/* names are typed with spaces, e.g. "Smith Robert Bob" (any order).
+   Part 1 is the first word. The button steps through the words in turn, then shows the whole name. */
+let partStep = 0;   // 0 = word 1, 1 = word 2, ... and the "whole name" step after the last word
+function nameParts(raw){ return String(raw).split(/[\s\/]+/).filter(Boolean); }
+function partCount(){ return Math.max(1, ...students.map(n => nameParts(n).length)); }   // the longest name sets the steps
+function stepCount(){ const c = partCount(); return c > 1 ? c + 1 : 1; }                  // +1 for the whole-name step
+function shownName(raw, step = partStep){
+  const p = nameParts(raw);
+  if (!p.length) return '';
+  if (step >= partCount()) return p.join(' ');                 // whole-name step
+  return p[Math.min(step, p.length - 1)];                      // a name with fewer words keeps its last word
+}
+function updatePartBtn(){
+  if (partStep >= stepCount()) partStep = 0;                   // names were removed: start again
+  const c = partCount();
+  $('#partBtn').textContent = (partStep >= c ? 'Whole name' : `Part ${partStep + 1} of ${c}`) + ' ›';
+  $('#partBtn').disabled = stepCount() <= 1;
+}
+function cyclePart(){
+  partStep = (partStep + 1) % stepCount();
+  updatePartBtn();
+  refreshNames();
+}
+/* swap the text on screen to the current part, without reshuffling anything */
+function refreshNames(){
+  document.querySelectorAll('[data-name]').forEach(el => {
+    if (el.dataset.name) el.textContent = shownName(el.dataset.name);
+  });
+}
 function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; }
 const tbById = id => tables.find(t => t.id === id);
 const seatById = id => seats.find(s => s.id === id);
@@ -492,9 +527,10 @@ function dropSeat(name){
 /* class list: a tile per student, add one at a time or paste a whole list */
 function renderTiles(){
   $('#tiles').innerHTML = students.length ? students.map((n, i) =>
-    `<span class="tile ${absent.has(n) ? 'absent' : ''}" data-i="${i}" title="Tap to mark ${esc(n)} absent">${esc(n)}<button data-rm="${i}" title="Remove ${esc(n)}" aria-label="Remove ${esc(n)}">×</button></span>`).join('') : '<p class="muted empty-hint">Add students below</p>';
+    `<span class="tile ${absent.has(n) ? 'absent' : ''}" data-i="${i}" title="Tap to mark ${esc(n)} absent">${esc(nameParts(n).join(' '))}<button data-rm="${i}" title="Remove ${esc(n)}" aria-label="Remove ${esc(n)}">×</button></span>`).join('') : '<p class="muted empty-hint">Add students below</p>';
   const c = students.length;
   $('#count').textContent = c + (c === 1 ? ' student' : ' students');
+  updatePartBtn();
 }
 function addNames(list){
   list.map(s => s.trim()).filter(Boolean).forEach(n => students.push(n));
@@ -728,6 +764,7 @@ function tableHTML(tb){
   const lt = labelTurn(tb);
   const isPicked = picked.includes(tb.id) ? 'picked' : '';
   const isHot = tb.id === hotTid ? 'hot' : '';
+  const twoSeat = list.length === 2 ? 'two' : '';   // two names: stacked top and bottom, to match the chairs
 
   const chairs = list.map(s => `
     <div class="seat ${s.name ? '' : 'empty'} ${sel === s.id ? 'sel' : ''}" data-seat="${s.id}"
@@ -735,12 +772,12 @@ function tableHTML(tb){
 
   const labels = list.map((s, k) => `
     <div class="tn ${s.name ? '' : 'empty'} ${sel === s.id ? 'sel' : ''} ${s.name && askedNames.has(s.name) ? 'asked' : ''}"
-         data-seat="${s.id}" style="transform:rotate(${lt}deg)">${s.name ? esc(s.name) : 'Empty'}</div>`).join('');
+         data-seat="${s.id}" data-name="${esc(s.name)}" style="transform:rotate(${lt}deg)">${s.name ? esc(shownName(s.name)) : 'Empty'}</div>`).join('');
 
   return `
     <div class="table ${isPicked} ${isHot}" data-kind="table" data-id="${tb.id}" style="left:${tb.x}px;top:${tb.y}px">
       <div class="rig" style="transform:rotate(${tb.a}deg)">
-        <div class="surface" style="left:${-sw/2}px;top:${-sh/2}px;width:${sw}px;height:${sh}px">${labels}</div>
+        <div class="surface ${twoSeat}" style="left:${-sw/2}px;top:${-sh/2}px;width:${sw}px;height:${sh}px">${labels}</div>
         ${chairs}
         <div class="turnwrap" style="left:${sw/2 - 22*K}px;top:${sh/2 - 22*K}px;transform:rotate(${-tb.a}deg)">
           <button class="turn" data-act="turn" title="Turn 90°">⟳</button>
@@ -1021,7 +1058,7 @@ function renderStanding(){
   grid.innerHTML = standingSplit(list, size).map((g, i) => `
     <div class="gcard">
       <h3>Group ${i + 1}</h3>
-      ${g.map(n => `<div class="n ${askedNames.has(n) ? 'asked' : ''}">${esc(n)}</div>`).join('')}
+      ${g.map(n => `<div class="n ${askedNames.has(n) ? 'asked' : ''}" data-name="${esc(n)}">${esc(shownName(n))}</div>`).join('')}
     </div>`).join('');
 }
 
@@ -1086,7 +1123,7 @@ function pickPool(){ return names().filter(n => !askedNames.has(n)); }
 // every name on screen right now: table labels (Sitting) or group names (Standing)
 function pickCandidates(){
   const q = mode() === 'standing' ? '#groups .n' : '#floor .tn:not(.empty)';
-  return [...document.querySelectorAll(q)].map(el => ({ el, name: el.textContent.trim() }));
+  return [...document.querySelectorAll(q)].map(el => ({ el, name: el.dataset.name }));
 }
 
 function setStatus(html){ $('#pickStatus').innerHTML = html; }
@@ -1142,7 +1179,7 @@ function showSpot(name){
   const sp = $('#spotlight');
   clearTimeout(spotTimer);
   sp.classList.remove('out');
-  sp.innerHTML = `<div class="spotName">${esc(name)}</div>`;
+  sp.innerHTML = `<div class="spotName">${esc(shownName(name))}</div>`;
   sp.classList.add('show');
   spotTimer = setTimeout(hideSpot, 3000);   // goes away by itself after 3 seconds
 }
@@ -1316,10 +1353,13 @@ if ('speechSynthesis' in window){
   speechSynthesis.onvoiceschanged = fillVoices;   // some browsers load voices a moment later
   fillVoices();
 }
+/* name parts: one button for the whole room */
+$('#partBtn').addEventListener('click', cyclePart);
+
 /* standard view: tapping a name reads it out, whatever the Voice setting */
 $('#groups').addEventListener('click', e => {
   const n = e.target.closest('.n');
-  if (n) speakName(n.textContent.trim());
+  if (n) speakName(n.dataset.name);
 });
 $('#voiceSel').addEventListener('change', () => { if (voiceOn && lastPick) speakName(lastPick); });
 $('#voiceBtn').addEventListener('click', () => {
@@ -1333,7 +1373,7 @@ function speakName(name){
   try {
     if (!('speechSynthesis' in window)) return;
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(name);
+    const u = new SpeechSynthesisUtterance(shownName(name));
     const chosen = englishVoices().find(v => v.voiceURI === $('#voiceSel').value) || pickVoice();
     if (chosen){ u.voice = chosen; u.lang = chosen.lang; } else { u.lang = 'en-AU'; }
     u.rate = 0.92; u.pitch = 1.05;
